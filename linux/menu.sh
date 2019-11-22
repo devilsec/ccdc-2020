@@ -3,7 +3,7 @@ currentDir=$(pwd)
 resourcesDir="$currentDir/menuResources"
 RED='\033[0;41;30m'
 STD='\033[0;0;39m'
-packageManager="apt"
+packageManager="apt-get"
 
 pause() {
 	read -p "Press [Enter] key to continue.." fackEnterKey
@@ -81,11 +81,20 @@ strippedServices() {
 
 }
 
+packageChecks() {
+	check=`which dpkg`
+	if [ $check ]; then
+		dpkgPresent=0
+	fi
+	
+}
+
 serviceVersions() {
 	trap - SIGINT
 	local serviceFile="$resourcesDir/runningServices"
 	local versionFile="$resourcesDir/serviceVersions"
 	echo '' > $versionFile
+	
 
 	ls $serviceFile >/dev/null 2>&1
 	if [[ $? -ne 0 ]];then
@@ -96,26 +105,36 @@ serviceVersions() {
 	remainingServices=(${services[@]})
 	local i=0
 	for service in ${remainingServices[@]}; do
+
+
+
 		echo -e "${RED}[$service]--------------------------------------${STD}\t[$i]"
 	
-		if [ $packageManager == "apt" ];then
-			version=`apt -v $service`
-			echo $version
-
+		if [ $dpkgPresent -eq 0 ]; then
+			package=$(dpkg -S $service | cut -d":" -f 1 | head -n 1)
+			dpkg -s $package | grep -e "Package" -e "Version"
+			unset remainingServices[$i]
+		elif [ $packageManager == "apt" ];then
+			version=`apt-get list $service --installed 2>/dev/null`
+			if [ "$version" ];then
+				echo $version
+				unset remainingServices[$i]
+			fi
+			
 		#check based on the individual commands --version, output can be unpredictable.
 		verCheck=`$service --version 2>/dev/null | head -n 3`
 		echo $?
-		if [ "$verCheck" ]; then
+		elif [ "$verCheck" ]; then
 			echo -e "\t $verCheck"
 			unset remainingServices[$i]
-	#		if [ `echo $verCheck | wc -l` -eq 1 ]; then
-	#			echo "$service:$verCheck," >> $versionFile
-	#		fi
 		fi
-
+	
 	i=$((i+1))
 	done	
-	echo "${remainingServices[@]}:${#remainingServices[@]}"
+	if [ ${#remainingServices[@]} -gt 0 ]; then
+		echo "The versions of the following packages was not found:"
+		echo "${remainingServices[@]}:${#remainingServices[@]}"
+	fi
 	pause
 }
 
@@ -133,15 +152,50 @@ portInfo() {
 	pause
 }
 
+installedPackages() {
+	echo "[+]Installed packages:"
+	if [ $dpkgPresent ]; then 	
+		dpkg -s | grep -e "Package:" -e "Version" | awk '{print;} NR % 2 == 0 {print "";}'
+
+	fi
+
+	pause
+
+}
+
+checkIntegrity() {
+	if [ $dpkgPresent ]; then
+		debsumsCheck=`which debsums`
+		if [ $? -ne 0 ] && [ $packageManager == "apt-get"]; then
+			apt-get install debsums -y
+		fi
+		debsums -c 
+		echo 
+		echo
+		echo "Note: You can mostly ignore missing files, you should look out for files that were modified/have a different hash."
+	fi	
+
+}
+installSnort() {
+	if [ $packageManager == "apt-get" ]; then
+		apt-get install snort -y
+	fi
+}
 showMenu() {
 	clear 
 	echo "------------------"
 	echo "       Menu       "
 	echo "------------------"
+	uname -a
+	cat /etc/lsb-release
+	echo
 	echo "1) Run linenum.sh (this should be done first)"
 	echo "2) Check Running Service"
 	echo "3) Check Service Versions"
-	echo "4) Show listening ports"
+	echo "4) Show listening Ports"
+	echo "5) Show Installed Packages"
+	echo "6) Check File Integrity/Check for backdoors"
+	echo "7) Install snort"
 	echo "x) Exit"
 	
 }
@@ -155,7 +209,9 @@ readInput() {
 		2) strippedServices;;
 		3) serviceVersions   ;;
 		4) portInfo   ;;
-		*) echo -e "${RED}Not Recognized..${STD}"
+		5) installedPackages ;;
+		6) checkIntegrity   ;;
+		*) echo -e "${RED}Not Recognized..${STD}"; sleep 1; ;;
 	esac
 }
 
@@ -174,6 +230,7 @@ trap '' SIGINT SIGQUIT SIGTSTP
 
 #make folder we will put our resources into
 checkExisting
+packageChecks
 
 if [ $resourcesExists ]; then
 	echo "Ingesting last run data"
