@@ -39,18 +39,44 @@ runLinEnum() {
 
 serviceInfo()
 {
-	echo -e "\e[00;33m### SERVICES #############################################\e[00m" 
+	echo  "### SERVICES #############################################" 
 	#running processes
 	psaux=`ps aux 2>/dev/null`
 	if [ "$psaux" ]; then
 		echo -e "[-] Running processes:"
 		awk '{
-			if ($5 == 0)
+			if ($5 != 0)
 				print $1, $11
-		}'
+		}' <<< $psaux
 		echo -e "\n"
 	fi
 	pause
+}
+
+strippedServices() {
+	ps aux | awk '{
+	if ($5!=0) print $11
+	}' <<< "$(ps aux)" | awk -F "/" '{print $NF}' | grep -v ]$
+
+
+}
+
+portInfo() {
+	tcpserv=`netstat -ntpl`
+	if [ "$tcpserv" ]; then
+		echo "Listening TCP Services (Generally these are gonna be more important the UDP)"
+		echo "$tcpserv"
+	fi
+	udpserv=`netstat -nupl`
+	if [ "$udpserv" ]; then
+		echo "Listening UDP Services (be careful with these)"
+		echo "$udpserv"
+	fi
+	pause
+}
+
+serviceVersions() {
+	
 }
 
 showMenu() {
@@ -60,6 +86,7 @@ showMenu() {
 	echo "------------------"
 	echo "1) Run linenum.sh (this should be done first)"
 	echo "2) Check Service Info"
+	echo "3) Show listening ports"
 	echo "x) Exit"
 	
 }
@@ -71,6 +98,7 @@ readInput() {
 	        x) exit ;;	
 		1) runLinEnum ;;
 		2) serviceInfo;;
+		3) portInfo   ;;
 		*) echo -e "${RED}Not Recognized..${STD}"
 	esac
 }
