@@ -1,7 +1,9 @@
 #!/bin/bash
 currentDir=$(pwd)
+resourcesDir="$currentDir/menuResources"
 RED='\033[0;41;30m'
 STD='\033[0;0;39m'
+packageManager="apt"
 
 pause() {
 	read -p "Press [Enter] key to continue.." fackEnterKey
@@ -54,11 +56,67 @@ serviceInfo()
 }
 
 strippedServices() {
-	ps aux | awk '{
-	if ($5!=0) print $11
-	}' <<< "$(ps aux)" | awk -F "/" '{print $NF}' | grep -v ]$
+	echo "[+] Checking services.............."
+	local serviceArray=()
+ 	local count=0
+	while read line;do
+		serviceArray[$((count++))]=$line
+	done <<< $(ps aux | awk '{if ($5!=0) print $11}' <<< "$(ps aux)" | awk -F "/" '{print $NF}' | grep -v -e "^\[" -e "COMMAND" | grep -v -e "bash" -e "awk" -e "ps") #get  list of all currently running services
+	#Sort service array
+	IFS=$'\n' sorted=($(sort <<< "${serviceArray[*]}")) #Put EVERY element of serviceArray into the sort command -> put it into new array sorted.
+	#it breaks it into individual indicies because of IFS (internal field seperator)
+	
+	#uniq sorted array 
+	services=($(uniq <<< "${sorted[*]}"))
+	unset IFS 
 
+	local arrayLength=${#services[@]}
+	
+	for i in $(seq 0 $arrayLength); do
+		echo ${services[$i]}
+		i=$((i++))
+	done
+	echo ${services[*]} > "$resourcesDir/runningServices"
+	pause
 
+}
+
+serviceVersions() {
+	trap - SIGINT
+	local serviceFile="$resourcesDir/runningServices"
+	local versionFile="$resourcesDir/serviceVersions"
+	echo '' > $versionFile
+
+	ls $serviceFile >/dev/null 2>&1
+	if [[ $? -ne 0 ]];then
+		echo "Services has not yet been checked, doing so now." 
+		strippedServices
+	fi
+
+	remainingServices=(${services[@]})
+	local i=0
+	for service in ${remainingServices[@]}; do
+		echo -e "${RED}[$service]--------------------------------------${STD}\t[$i]"
+	
+		if [ $packageManager == "apt" ];then
+			version=`apt -v $service`
+			echo $version
+
+		#check based on the individual commands --version, output can be unpredictable.
+		verCheck=`$service --version 2>/dev/null | head -n 3`
+		echo $?
+		if [ "$verCheck" ]; then
+			echo -e "\t $verCheck"
+			unset remainingServices[$i]
+	#		if [ `echo $verCheck | wc -l` -eq 1 ]; then
+	#			echo "$service:$verCheck," >> $versionFile
+	#		fi
+		fi
+
+	i=$((i+1))
+	done	
+	echo "${remainingServices[@]}:${#remainingServices[@]}"
+	pause
 }
 
 portInfo() {
@@ -75,18 +133,15 @@ portInfo() {
 	pause
 }
 
-serviceVersions() {
-	
-}
-
 showMenu() {
 	clear 
 	echo "------------------"
 	echo "       Menu       "
 	echo "------------------"
 	echo "1) Run linenum.sh (this should be done first)"
-	echo "2) Check Service Info"
-	echo "3) Show listening ports"
+	echo "2) Check Running Service"
+	echo "3) Check Service Versions"
+	echo "4) Show listening ports"
 	echo "x) Exit"
 	
 }
@@ -97,15 +152,34 @@ readInput() {
 	case $choice in
 	        x) exit ;;	
 		1) runLinEnum ;;
-		2) serviceInfo;;
-		3) portInfo   ;;
+		2) strippedServices;;
+		3) serviceVersions   ;;
+		4) portInfo   ;;
 		*) echo -e "${RED}Not Recognized..${STD}"
 	esac
+}
+
+checkExisting() {
+	ls -D $resourcesDir
+	if [[ $? -eq 2 ]]; then
+		echo "$resourcesDir not created, creating.."
+		mkdir $resourcesDir
+	fi
+	resourcesExists=true
 }
 
 
 #Trap ctl+z and ctrl+c
 trap '' SIGINT SIGQUIT SIGTSTP
+
+#make folder we will put our resources into
+checkExisting
+
+if [ $resourcesExists ]; then
+	echo "Ingesting last run data"
+	IFS=$' ' services=($(cat $resourcesDir/runningServices))
+fi
+
 
 #Menu Persistence
 while true
