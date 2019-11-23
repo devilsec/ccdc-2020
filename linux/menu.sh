@@ -178,11 +178,15 @@ checkIntegrity() {
 }
 
 changePasswords() {
+	echo "Users on system"
+	trap - SIGINT
 	cat /etc/passwd | grep -v -e nologin | cut -d":" -f 1 
+	read -p "Enter password to change all users to: " password
 	while read line; 
-	do 
-		passwd $line <<< `echo $password && echo $passwd`
-		echo "$line,$password,"
+	do
+		stauts=$((passwd $line 2>/dev/null ) <<< `echo $password && echo $password`)
+
+		echo "$line,$password"
 
 	done <<< `cat /etc/passwd | grep -v -e nologin | cut -d":" -f 1`
 	
