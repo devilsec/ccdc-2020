@@ -176,6 +176,19 @@ checkIntegrity() {
 	fi	
 
 }
+
+changePasswords() {
+	cat /etc/passwd | grep -v -e nologin | cut -d":" -f 1 
+	while read line; 
+	do 
+		passwd $line <<< `echo $password && echo $passwd`
+		echo "$line,$password,"
+
+	done <<< `cat /etc/passwd | grep -v -e nologin | cut -d":" -f 1`
+	
+	pause 
+}
+
 installSnort() {
 	if [ $packageManager == "apt-get" ]; then
 		apt-get install snort -y
@@ -196,6 +209,7 @@ showMenu() {
 	echo "5) Show Installed Packages"
 	echo "6) Check File Integrity/Check for backdoors"
 	echo "7) Install snort"
+	echo "8) Change passwords"
 	echo "x) Exit"
 	
 }
@@ -211,6 +225,8 @@ readInput() {
 		4) portInfo   ;;
 		5) installedPackages ;;
 		6) checkIntegrity   ;;
+		7) echo "Not implemented fully";;
+		8) changePasswords ;;
 		*) echo -e "${RED}Not Recognized..${STD}"; sleep 1; ;;
 	esac
 }
