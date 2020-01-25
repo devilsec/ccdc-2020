@@ -1,0 +1,14 @@
+- name: "Basic software installs"
+  package: name={{ item }}  state=present
+  with_items:
+          - nmap
+          - git
+          - locate
+           
+
+  #with_items:
+  #        - vim
+  #        - nmap
+  #        - git
+  #        - updatedb
+  #        - 
