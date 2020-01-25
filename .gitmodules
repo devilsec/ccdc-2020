@@ -1,0 +1,3 @@
+[submodule "ansible/roles/ansible-nagios"]
+	path = ansible/roles/ansible-nagios
+	url = https://github.com/sadsfae/ansible-nagios
