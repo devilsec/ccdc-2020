@@ -16,17 +16,27 @@ class ServiceListEntry {
 }
 
 $servicesList = [ServiceListEntry[]]@(
+[ServiceListEntry]@{
+        Displayname = "Core Services"
+        Services    = @(
+            "wuauserv", #Windows Update
+            "WinDefend",    #Defender (NOTE: If another security provider is registered and installed this service WILL BE UNABLE TO START since the primary security provider takes over AV/EDR functionality )
+                            # WUZAH DOES NOT DO THIS - THIS SERVICE SHOULD START
+                            
+            "mpssvc"        #Windows Defender Firewall
+        )
+    },
     [ServiceListEntry]@{
         DisplayName = "FTP"
         Services    = @(
-            "FTPSVC",           #IIS FTP Server
+            "FTPSVC", #IIS FTP Server
             "filezilla-server"  #Filezilla FTP Server
         )
     },
     [ServiceListEntry]@{
         DisplayName = "HTTP/HTTPS"
         Services    = @(
-            "HTTP",             #the HTTP 'service' is actually a driver needed for the Print Spooler, see https://superuser.com/questions/1059068/no-http-service-windows-10
+            "HTTP", #the HTTP 'service' is actually a driver needed for the Print Spooler, see https://superuser.com/questions/1059068/no-http-service-windows-10
             
             #IIS Services
             "W3SVC",
@@ -49,11 +59,28 @@ $servicesList = [ServiceListEntry[]]@(
     [ServiceListEntry]@{
         DisplayName = "telnet"
         Services    = @("Telnet")
+    },
+    [ServiceListEntry]@{
+        DisplayName = "Active Directory Domain Services"
+        Services    = @(
+            "DFSR", #DFS Replication
+            "Dfs"       #DFS Namespace
+            "IsmServ",
+            "kdc",
+            "netlogon"
+            "w32time",
+            "NTDS"      #Domain services
+            "DNS"       #DNS server
+            "Dnscache"  #DNS Client
+            "gpsvc"     #Group policy client
+        )
     }
+    
 )
 
 #list of services to monitor, Last item is entering manual name
 Write-Host "Select which services to monitor (separated by commas)"
+Write-Host "Core Services will be included by unless e(X)cluded"
 
 $servicesList | ForEach-Object { $index = 1 } { Write-Host "#$($index)" $_.DisplayName; $index++ }  #Print display name of all registered services 
 
@@ -62,8 +89,16 @@ Write-Host "#$($servicesList.Length + 1) Custom" #Custom option
 #prompt user for number
 $optionNumbers = read-host "Select a number from above list: "
 
+$skipCoreServicesRegistration = $false
+
 foreach ($option in $optionNumbers.Split(",")) {
     $option = $option.trim() #remove whitespace left over from Split()
+
+    if ($option -match "x|X") {
+        $skipCoreServicesRegistration = $true
+        Continue #skip this iteration of the foreach loop to prevent a custom service from being registered
+    }
+
 
     if ($option -le $servicesList.Length) {
 
@@ -93,12 +128,41 @@ foreach ($option in $optionNumbers.Split(",")) {
         }
     }
     else {
-        #This last option promps user for custom service not listed above
-        $serviceName = Read-Host "Enter Service Name (not display name), confirm after setup that script is running correctly"
-        $monitoredServiceList.Add($serviceName) #add custom service name to monitoring list
+        #loop until a valid service name is inputted
+        while ($true) {
+            #This last option promps user for custom service not listed above
+            $serviceName = Read-Host "Enter Service Name (not display name), confirm after setup that script is running correctly"
+
+            $serviceExists = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+            Write-host $serviceExists
+            if ($null -eq $serviceExists) {
+                Write-Warning "No custom service '$serviceName' is present on this system! Check for a typo!"
+            }
+            else {
+                $monitoredServiceList.Add($serviceName) #add custom service name to monitoring list
+                Write-Host "Custom service '$serviceName' successfully added!"
+                Break
+            }
+        }
+        
     }
-    
 }
+
+#Core services
+if ($skipCoreServicesRegistration -eq $false) {
+    $servicesList[0].Services  | ForEach-Object {
+    Write-Host $_
+        $serviceExists = Get-Service -Name $_ -ErrorAction SilentlyContinue
+        if ($null -ne $serviceExists) {
+            $monitoredServiceList.Add($_) #add previously existing service name to monitoring list
+        }
+        else {
+            Write-Warning "Core Service '$_' is not present on this system!"
+            Write-Warning "Check for mispelling."
+        }
+    }
+}
+
 #formatting
 Write-host "---------------------------------------------------------------------------------------------------------"
 
@@ -169,6 +233,10 @@ while ($wack -eq "true") {
 
 #reference
 #https://social.technet.microsoft.com/Forums/windowsserver/en-US/79bf9de7-1c17-45c0-a02b-7558af89807a/powershell-script-to-check-service-status
+
 #IIS Services 
 # https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2012-r2-and-2012/jj635851(v=ws.11), 
 # https://docs.oracle.com/en/industries/health-sciences/inform/cognos1117-install/index.html?toc.htm?226411.htm)
+
+#Active Directory
+# https://www.stigviewer.com/stig/microsoft_windows_server_2012_domain_controller/2013-07-25/finding/WN12-AD-000010-DC
